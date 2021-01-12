@@ -131,6 +131,7 @@ public:
     cv::Mat DrawCurrentFrame ();
 
     std::vector<MapPoint*> GetAllMapPoints();
+    std::vector<KeyFrame*> GetAllKeyFrames();
 
 private:
     bool SetCallStackSize (const rlim_t kNewStackSize);
