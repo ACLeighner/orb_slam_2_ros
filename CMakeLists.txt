@@ -74,6 +74,8 @@ add_service_files(
 add_message_files (
 	FILES
 	KeyFrames.msg
+	Observation.msg
+	Observations.msg
 )
 
 generate_messages(
@@ -119,7 +121,7 @@ orb_slam2/src/KeyFrameDatabase.cc
 orb_slam2/src/Sim3Solver.cc
 orb_slam2/src/Initializer.cc
 )
-add_dependencies (${PROJECT_NAME} g2o DBoW2)
+add_dependencies (${PROJECT_NAME} g2o orb_slam2_ros DBoW2)
 
 target_link_libraries(${PROJECT_NAME}
 ${LIBS_ORBSLAM}
