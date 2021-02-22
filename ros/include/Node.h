@@ -44,6 +44,8 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <std_msgs/String.h>
 #include <orb_slam2_ros/KeyFrames.h>
+#include <orb_slam2_ros/Observation.h>
+#include <orb_slam2_ros/Observations.h>
 
 #include "System.h"
 
@@ -63,6 +65,7 @@ class Node
 
   private:
     void PublishMapPoints (std::vector<ORB_SLAM2::MapPoint*> map_points);
+    void PublishObservations (std::vector<ORB_SLAM2::MapPoint*> map_points);
     void PublishKeyFrames (std::vector<ORB_SLAM2::KeyFrame*> keyframes);
     void PublishPositionAsTransform (cv::Mat position);
     void PublishPositionAsPoseStamped(cv::Mat position);
@@ -76,6 +79,8 @@ class Node
 
     sensor_msgs::PointCloud2 MapPointsToPointCloud (std::vector<ORB_SLAM2::MapPoint*> map_points);
 
+    orb_slam2_ros::Observations MapPointsToObservations (std::vector<ORB_SLAM2::MapPoint*> map_points);
+
     orb_slam2_ros::KeyFrames KeyFramesMsgBuilder (std::vector<ORB_SLAM2::KeyFrame*> keyframes);
 
     dynamic_reconfigure::Server<orb_slam2_ros::dynamic_reconfigureConfig> dynamic_param_server_;
@@ -83,6 +88,7 @@ class Node
     image_transport::Publisher rendered_image_publisher_;
     ros::Publisher map_points_publisher_;
     ros::Publisher keyframes_publisher_;
+    ros::Publisher observations_publisher_;
     ros::Publisher pose_publisher_;
     ros::Publisher state_publisher_;
 
@@ -104,6 +110,7 @@ class Node
     bool load_map_param_;
     bool publish_pointcloud_param_;
     bool publish_keyframes_param_;
+    bool publish_observations_param_;
     bool publish_tf_param_;
     bool publish_pose_param_;
     int min_observations_per_point_;
