@@ -23,6 +23,7 @@ void Node::Init () {
   //static parameters
   node_handle_.param(name_of_node_+ "/publish_pointcloud", publish_pointcloud_param_, true);
   node_handle_.param(name_of_node_+ "/publish_keyframes", publish_keyframes_param_, true);
+  node_handle_.param(name_of_node_+ "/publish_observations", publish_observations_param_, true);
   node_handle_.param(name_of_node_+ "/publish_pose", publish_pose_param_, true);
   node_handle_.param(name_of_node_+ "/publish_tf", publish_tf_param_, true);
   node_handle_.param<std::string>(name_of_node_+ "/pointcloud_frame_id", map_frame_id_param_, "map");
@@ -49,11 +50,14 @@ void Node::Init () {
     map_points_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2> (name_of_node_+"/map_points", 1);
   }
 
+  if (publish_observations_param_) {
+    observations_publisher_ = node_handle_.advertise<orb_slam2_ros::Observations> (name_of_node_+"/observations", 1);
+  }
+
   if (publish_keyframes_param_) {
     keyframes_publisher_ = node_handle_.advertise<orb_slam2_ros::KeyFrames> (name_of_node_+"/keyframes", 1);
     //pose_array_publisher_  = node_handle_.advertise<geometry_msgs::PoseArray> (name_of_node_+"/pose_array", 1);
   }
-
 
   // Enable publishing camera's pose as PoseStamped message
   if (publish_pose_param_) {
@@ -80,15 +84,23 @@ void Node::Update () {
     PublishMapPoints (orb_slam_->GetAllMapPoints());
   }
 
+  if (publish_observations_param_) {
+    PublishObservations (orb_slam_->GetAllMapPoints());
+  }
+
   if (publish_keyframes_param_) {
     PublishKeyFrames (orb_slam_->GetAllKeyFrames());
   }
-
 }
 
 void Node::PublishMapPoints (std::vector<ORB_SLAM2::MapPoint*> map_points) {
   sensor_msgs::PointCloud2 cloud = MapPointsToPointCloud (map_points);
   map_points_publisher_.publish (cloud);
+}
+
+void Node::PublishObservations (std::vector<ORB_SLAM2::MapPoint*> map_points) {
+  orb_slam2_ros::Observations observations = MapPointsToObservations (map_points);
+  observations_publisher_.publish (observations);
 }
 
 void Node::PublishKeyFrames (std::vector<ORB_SLAM2::KeyFrame*> keyframes) {
@@ -143,7 +155,6 @@ void Node::PublishTrackingState (int state_idx) {
   state_publisher_.publish(state);
 }
 
-
 tf::Transform Node::TransformFromMat (cv::Mat position_mat) {
   cv::Mat rotation(3,3,CV_32F);
   cv::Mat translation(3,1,CV_32F);
@@ -179,7 +190,6 @@ tf::Transform Node::TransformFromMat (cv::Mat position_mat) {
   return tf::Transform (tf_camera_rotation, tf_camera_translation);
 }
 
-
 sensor_msgs::PointCloud2 Node::MapPointsToPointCloud (std::vector<ORB_SLAM2::MapPoint*> map_points) {
   //if (map_points.size() == 0) {
   //  std::cout << "Map point vector is empty!" << std::endl;
@@ -209,7 +219,7 @@ sensor_msgs::PointCloud2 Node::MapPointsToPointCloud (std::vector<ORB_SLAM2::Map
 
   cloud.data.resize(cloud.row_step * cloud.height);
 
-	unsigned char *cloud_data_ptr = &(cloud.data[0]);
+  unsigned char *cloud_data_ptr = &(cloud.data[0]);
 
   float data_array[num_channels];
   for (unsigned int i=0; i<cloud.width; i++) {
@@ -218,12 +228,40 @@ sensor_msgs::PointCloud2 Node::MapPointsToPointCloud (std::vector<ORB_SLAM2::Map
       data_array[1] = -1.0* map_points.at(i)->GetWorldPos().at<float> (0); //y. Do the transformation by just reading at the position of x instead of y
       data_array[2] = -1.0* map_points.at(i)->GetWorldPos().at<float> (1); //z. Do the transformation by just reading at the position of y instead of z
       //TODO dont hack the transformation but have a central conversion function for MapPointsToPointCloud and TransformFromMat
-
       memcpy(cloud_data_ptr+(i*cloud.point_step), data_array, num_channels*sizeof(float));
     }
   }
-
   return cloud;
+}
+
+orb_slam2_ros::Observations Node::MapPointsToObservations (std::vector<ORB_SLAM2::MapPoint*> map_points) {
+
+  orb_slam2_ros::Observations output;
+
+  for (ORB_SLAM2::MapPoint* mp : map_points) {
+    //Check min number of observations of points
+    if (mp->nObs >= min_observations_per_point_) {
+      //create a new point
+      orb_slam2_ros::Observation obj_obs;
+      //get mp position data
+      obj_obs.x = mp->GetWorldPos().at<float> (2); //x. Do the transformation by just reading at the position of z instead of x
+      obj_obs.y = -1.0* mp->GetWorldPos().at<float> (0); //y. Do the transformation by just reading at the position of x instead of y
+      obj_obs.z = -1.0* mp->GetWorldPos().at<float> (1); //z. Do the transformation by just reading at the position of y instead of z
+      std::map<ORB_SLAM2::KeyFrame*, size_t> kf_obs = mp->GetObservations();
+      //GET Timestamps of keyframe observations for this point
+      for (const auto &kf_ob : kf_obs) {
+        ORB_SLAM2::KeyFrame* ob = kf_ob.first;
+        ros::Time ros_stamp;
+        ros_stamp.fromSec(ob->mTimeStamp);
+        std_msgs::Time stamp;
+        stamp.data.sec = ros_stamp.sec;
+        stamp.data.nsec = ros_stamp.nsec;
+        obj_obs.stamps.push_back(stamp);
+      }
+      output.observations.push_back(obj_obs);
+    }
+  }
+  return output;
 }
 
 orb_slam2_ros::KeyFrames Node::KeyFramesMsgBuilder (std::vector<ORB_SLAM2::KeyFrame*> keyframes) {
@@ -279,10 +317,8 @@ bool Node::SaveMapSrv (orb_slam2_ros::SaveMap::Request &req, orb_slam2_ros::Save
   } else {
     ROS_ERROR ("Map could not be saved.");
   }
-
   return res.success;
 }
-
 
 void Node::LoadOrbParameters (ORB_SLAM2::ORBParameters& parameters) {
   //ORB SLAM configuration parameters
