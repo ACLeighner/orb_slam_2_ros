@@ -43,6 +43,7 @@
 #include <geometry_msgs/PoseArray.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <std_msgs/String.h>
+#include <std_msgs/Float32.h>
 #include <orb_slam2_ros/KeyFrames.h>
 #include <orb_slam2_ros/Observation.h>
 #include <orb_slam2_ros/Observations.h>
@@ -71,9 +72,11 @@ class Node
     void PublishPositionAsPoseStamped(cv::Mat position);
     void PublishRenderedImage (cv::Mat image);
     void PublishTrackingState (int state_idx);
+    void scaleCallback(const std_msgs::Float32& msg);
     void ParamsChangedCallback(orb_slam2_ros::dynamic_reconfigureConfig &config, uint32_t level);
     bool SaveMapSrv (orb_slam2_ros::SaveMap::Request &req, orb_slam2_ros::SaveMap::Response &res);
     void LoadOrbParameters (ORB_SLAM2::ORBParameters& parameters);
+
 
     tf::Transform TransformFromMat (cv::Mat position_mat);
 
@@ -91,6 +94,9 @@ class Node
     ros::Publisher observations_publisher_;
     ros::Publisher pose_publisher_;
     ros::Publisher state_publisher_;
+
+    ros::Subscriber scale_subscriber_;
+    float map_scale_ = 1.0;
 
     ros::Publisher pose_array_publisher_;
     geometry_msgs::PoseArray PoseArrayMsgBuilder (std::vector<ORB_SLAM2::KeyFrame*> keyframes);
