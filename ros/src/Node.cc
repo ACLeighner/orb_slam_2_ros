@@ -64,6 +64,8 @@ void Node::Init () {
     pose_publisher_ = node_handle_.advertise<geometry_msgs::PoseStamped> (name_of_node_+"/pose", 1);
   }
 
+  scale_subscriber_ =  node_handle_.subscribe("/orb_slam2_mono/map_scale", 1, &Node::scaleCallback, this);
+
   state_publisher_ = node_handle_.advertise<std_msgs::Header>(name_of_node_+"/state", 1);
 }
 
@@ -155,6 +157,10 @@ void Node::PublishTrackingState (int state_idx) {
   state_publisher_.publish(state);
 }
 
+void Node::scaleCallback(const std_msgs::Float32& msg){
+  map_scale_ = msg.data;
+}
+
 tf::Transform Node::TransformFromMat (cv::Mat position_mat) {
   cv::Mat rotation(3,3,CV_32F);
   cv::Mat translation(3,1,CV_32F);
@@ -171,6 +177,7 @@ tf::Transform Node::TransformFromMat (cv::Mat position_mat) {
   tf::Vector3 tf_camera_translation (translation.at<float> (0), translation.at<float> (1), translation.at<float> (2));
 
   //Coordinate transformation matrix from orb coordinate system to ros coordinate system
+
   const tf::Matrix3x3 tf_orb_to_ros (0, 0, 1,
                                     -1, 0, 0,
                                      0,-1, 0);
@@ -224,9 +231,9 @@ sensor_msgs::PointCloud2 Node::MapPointsToPointCloud (std::vector<ORB_SLAM2::Map
   float data_array[num_channels];
   for (unsigned int i=0; i<cloud.width; i++) {
     if (map_points.at(i)->nObs >= min_observations_per_point_) {
-      data_array[0] = map_points.at(i)->GetWorldPos().at<float> (2); //x. Do the transformation by just reading at the position of z instead of x
-      data_array[1] = -1.0* map_points.at(i)->GetWorldPos().at<float> (0); //y. Do the transformation by just reading at the position of x instead of y
-      data_array[2] = -1.0* map_points.at(i)->GetWorldPos().at<float> (1); //z. Do the transformation by just reading at the position of y instead of z
+      data_array[0] = map_points.at(i)->GetWorldPos().at<float> (2) * map_scale_; //x. Do the transformation by just reading at the position of z instead of x
+      data_array[1] = -1.0* map_points.at(i)->GetWorldPos().at<float> (0) * map_scale_; //y. Do the transformation by just reading at the position of x instead of y
+      data_array[2] = -1.0* map_points.at(i)->GetWorldPos().at<float> (1) * map_scale_; //z. Do the transformation by just reading at the position of y instead of z
       //TODO dont hack the transformation but have a central conversion function for MapPointsToPointCloud and TransformFromMat
       memcpy(cloud_data_ptr+(i*cloud.point_step), data_array, num_channels*sizeof(float));
     }
@@ -244,9 +251,9 @@ orb_slam2_ros::Observations Node::MapPointsToObservations (std::vector<ORB_SLAM2
       //create a new point
       orb_slam2_ros::Observation obj_obs;
       //get mp position data
-      obj_obs.x = mp->GetWorldPos().at<float> (2); //x. Do the transformation by just reading at the position of z instead of x
-      obj_obs.y = -1.0* mp->GetWorldPos().at<float> (0); //y. Do the transformation by just reading at the position of x instead of y
-      obj_obs.z = -1.0* mp->GetWorldPos().at<float> (1); //z. Do the transformation by just reading at the position of y instead of z
+      obj_obs.x = mp->GetWorldPos().at<float> (2) * map_scale_; //x. Do the transformation by just reading at the position of z instead of x
+      obj_obs.y = -1.0* mp->GetWorldPos().at<float> (0) * map_scale_; //y. Do the transformation by just reading at the position of x instead of y
+      obj_obs.z = -1.0* mp->GetWorldPos().at<float> (1) * map_scale_; //z. Do the transformation by just reading at the position of y instead of z
       std::map<ORB_SLAM2::KeyFrame*, size_t> kf_obs = mp->GetObservations();
       //GET Timestamps of keyframe observations for this point
       for (const auto &kf_ob : kf_obs) {
